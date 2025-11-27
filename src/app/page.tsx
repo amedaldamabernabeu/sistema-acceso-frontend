@@ -1,33 +1,28 @@
-import Image from "next/image";
+'use client';
+import LoginForm from '../components/LoginForm';
+import DashboardMenu from '../components/DashboardMenu';
+import { useAuth } from '../components/auth/AuthProvider';
 
 export default function HomePage() {
-  return (
-    <div>
-      <div
-        style={{
-          height: 360,
-          backgroundImage: "url('/fondo.jpg')",
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          textShadow: '0 2px 6px rgba(0,0,0,0.45)',
-        }}
-      >
-        <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.45)', padding: 28, borderRadius: 12 }}>
-          <h1 style={{ fontSize: 40, margin: 0 }}>Control de Acceso - Universidad</h1>
-          <p style={{ marginTop: 8 }}>Panel de administración</p>
-        </div>
-      </div>
+  const { token } = useAuth();
 
-      <div className="container">
+  if (!token) {
+    return (
+      <div className="center-page" style={{ backgroundImage: "url('/fondo.jpg')" }}>
         <div className="card">
-          <h2>Bienvenido</h2>
-          <p>Use el menú para gestionar asociaciones entre Carreras y Departamentos.</p>
+          <h2>Iniciar sesión</h2>
+          <LoginForm redirectAfter="/" />
         </div>
       </div>
-    </div>
-  )
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[url('/fondo.jpg')] bg-cover bg-center p-10">
+      <div className="bg-white/70 rounded-3xl shadow-lg p-10">
+        
+        <DashboardMenu />
+      </div>
+    </main>
+  );
 }

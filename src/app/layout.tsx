@@ -1,38 +1,38 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+// src/app/layout.tsx
 import "./globals.css";
-import { ReactNode } from 'react';
-import Link from 'next/link';
+import { Metadata } from "next";
+import { ReactNode } from "react";
+import { AuthProvider } from "../components/auth/AuthProvider";
+import Footer from "@/components/Footer";
+import NavbarWrapper from "../components/NavbarWrapper";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata = {
-  title: 'Sistema de Gestión de Acceso',
-  description: 'Panel administrativo',
-}
+export const metadata: Metadata = {
+  title: "Sistema de Gestión de Acceso",
+  description: "Panel administrativo",
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
       <body>
-        <nav className="navbar">
-          <div style={{ fontWeight: 700 }}>Sistema de Acceso</div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
-            <Link href="/">Inicio</Link>
-            <Link href="/carrera-departamento">Carrera - Departamento</Link>
-          </div>
-        </nav>
+        <div className="app-bg">
+          <div className="app-shell">
 
-        <main>{children}</main>
+            <AuthProvider>
+              <NavbarWrapper />
+
+              {/* Contenido principal */}
+              <div style={{ width: "100%", flex: 1 }}>
+                {children}
+              </div>
+
+              {/* Footer */}
+              <Footer />
+            </AuthProvider>
+
+          </div>
+        </div>
       </body>
     </html>
-  )
+  );
 }

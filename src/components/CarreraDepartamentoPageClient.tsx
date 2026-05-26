@@ -1,5 +1,8 @@
- 'use client'
-import React, { useEffect, useState } from 'react';
+'use client';
+import { yaTieneNotificacionError } from '@/lib/ya-tiene-notificacion-error';
+import React, { useEffect, useMemo, useState } from 'react';
+import { filtrarPorTexto } from '@/lib/filtrar-por-texto';
+import FiltroTabla from '@/components/FiltroTabla';
 import {
   getDepartamentos,
   getCarreras,
@@ -15,6 +18,20 @@ export default function CarreraDepartamentoPageClient() {
   const [carreras, setCarreras] = useState<any[]>([]);
   const [asociaciones, setAsociaciones] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [busquedaTabla, setBusquedaTabla] = useState('');
+  const asociacionesFiltradas = useMemo(
+    () =>
+      filtrarPorTexto(asociaciones, busquedaTabla, (a) =>
+        [
+          a.departamento?.nombre_depto,
+          a.departamento?.nombre,
+          a.carrera?.nombre,
+          a.carrera?.plan,
+          a.carrera?.clave,
+        ].join(' '),
+      ),
+    [asociaciones, busquedaTabla],
+  );
 
   const fetchAll = async () => {
     setLoading(true);
@@ -29,7 +46,9 @@ export default function CarreraDepartamentoPageClient() {
       setAsociaciones(relRes.data || []);
     } catch (err) {
       console.error(err);
-      alert('Error al cargar datos desde el backend. Revisa la consola.');
+      if (!yaTieneNotificacionError(err)) {
+        alert('Error al cargar datos desde el backend. Revisa la consola.');
+      }
     } finally {
       setLoading(false);
     }
@@ -40,7 +59,6 @@ export default function CarreraDepartamentoPageClient() {
   }, []);
 
   const handleCreate = async (departamentoId: number, carreraId: number) => {
-    // Carrera.id puede venir como string (bigint) o number. Aseguramos Number.
     const payload = {
       departamentoId,
       carreraId: Number(carreraId),
@@ -50,21 +68,52 @@ export default function CarreraDepartamentoPageClient() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Eliminar asociación?')) return;
-    await deleteCarreraDepartamento(id);
-    await fetchAll();
+    if (!confirm('¿Eliminar esta asociación carrera — departamento?')) return;
+    try {
+      await deleteCarreraDepartamento(id);
+      await fetchAll();
+    } catch (err) {
+      console.error(err);
+      if (!yaTieneNotificacionError(err)) {
+        alert('No se pudo eliminar la asociación.');
+      }
+    }
   };
 
   return (
     <div>
       <div className="card">
         <h3>Crear asociación</h3>
-        <CarreraDepartamentoForm departamentos={departamentos} carreras={carreras} onCreate={handleCreate} />
+        <CarreraDepartamentoForm
+          departamentos={departamentos}
+          carreras={carreras}
+          asociaciones={asociaciones}
+          onCreate={handleCreate}
+        />
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h3>Asociaciones</h3>
-        {loading ? <p>Cargando...</p> : <CarreraDepartamentoTable asociaciones={asociaciones} onDelete={handleDelete} />}
+        <h3>Asociaciones por departamento</h3>
+        <p className="text-muted small mb-4">
+          Carreras agrupadas bajo cada departamento. Puede eliminar cada vínculo sin afectar al resto del mismo departamento.
+        </p>
+        <FiltroTabla
+          valor={busquedaTabla}
+          onChange={setBusquedaTabla}
+          placeholder="Buscar por departamento o carrera…"
+        />
+        {loading ? (
+          <p>Cargando…</p>
+        ) : asociaciones.length > 0 && asociacionesFiltradas.length === 0 ? (
+          <p className="text-muted" style={{ fontSize: 14 }}>
+            Sin resultados para la búsqueda.
+          </p>
+        ) : (
+          <CarreraDepartamentoTable
+            asociaciones={asociacionesFiltradas}
+            onDelete={handleDelete}
+          />
+        )}
       </div>
     </div>
   );

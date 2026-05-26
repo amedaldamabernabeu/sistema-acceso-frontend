@@ -18,10 +18,21 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[url('/fondo.jpg')] bg-cover bg-center p-10">
-      <div className="bg-white/70 rounded-3xl shadow-lg p-10">
-        
-        <DashboardMenu />
+    <main
+      className="min-h-screen w-full"
+      style={{
+        backgroundImage: "url('/fondo.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'scroll',
+        imageRendering: 'auto',
+      }}
+    >
+      <div className="dashboard-page-shell min-h-screen w-full p-3 sm:p-5 lg:p-6">
+        <div className="dashboard-page-panel w-full rounded-2xl sm:rounded-3xl shadow-lg p-4 sm:p-6 lg:p-8">
+          <DashboardMenu />
+        </div>
       </div>
     </main>
   );

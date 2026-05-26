@@ -1,5 +1,7 @@
 'use client';
 import { useState } from 'react';
+import { extraerMensajeErrorApi } from '@/lib/extraer-mensaje-error-api';
+import { mostrarNotificacion } from '@/lib/notificaciones';
 import { authLogin } from '../services/api';
 import { useAuth } from './auth/AuthProvider';
 
@@ -20,8 +22,10 @@ export default function LoginForm({ redirectAfter = '/' }: LoginFormProps) {
       if (!token) throw new Error('Token no recibido');
       await auth.login(token);
       // AuthProvider.login guarda el token y carga user; layout/navbar se actualizarán
-    } catch (err:any) {
-      alert(err?.response?.data?.message || err.message || 'Error al iniciar sesión');
+    } catch (err: unknown) {
+      const mensaje =
+        extraerMensajeErrorApi(err) || 'Error al iniciar sesión. Verifique sus credenciales.';
+      mostrarNotificacion({ tipo: 'error', mensaje });
     } finally {
       setLoading(false);
     }

@@ -1,23 +1,54 @@
 'use client';
+
+import { yaTieneNotificacionError } from '@/lib/ya-tiene-notificacion-error';
 import { useEffect, useState } from 'react';
+import FiltroRegistroAcceso from '@/components/FiltroRegistroAcceso';
 import {
   getRegistrosAcceso,
   updateRegistroAcceso,
   deleteRegistroAcceso,
+  getTiposIngreso,
 } from '@/services/api';
-import { Pencil, Trash2, Search } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
+import { usePaginacion } from '@/lib/use-paginacion';
+import PaginacionTabla from '@/components/PaginacionTabla';
+import ResponsiveTable, { type ColumnaResponsive } from '@/components/ResponsiveTable';
+
+type FormState = {
+  id: number;
+  codigoUsuario: string;
+  tipoIngresoEntradaId: string;
+  tipoIngresoSalidaId: string;
+  entrada: string;
+  salida: string;
+};
+
+type RegistroAcceso = {
+  id: number;
+  codigoUsuario: string;
+  entrada: string;
+  salida: string;
+  tipoIngresoEntrada?: { nombre?: string };
+  tipoIngresoSalida?: { nombre?: string };
+  dispositivoEntrada?: { nombre?: string };
+  dispositivoSalida?: { nombre?: string };
+};
+
+const vacioForm: FormState = {
+  id: 0,
+  codigoUsuario: '',
+  tipoIngresoEntradaId: '',
+  tipoIngresoSalidaId: '',
+  entrada: '',
+  salida: '',
+};
 
 export default function RegistroAccesoList() {
   const [registros, setRegistros] = useState<any[]>([]);
   const [filtered, setFiltered] = useState<any[]>([]);
+  const [tiposIngreso, setTiposIngreso] = useState<any[]>([]);
 
-  const [formData, setFormData] = useState<any>({
-    id: 0,
-    codigoUsuario: '',
-    modoAccesoId: '',
-    entrada: '',
-    salida: '',
-  });
+  const [formData, setFormData] = useState<FormState>({ ...vacioForm });
 
   const [filters, setFilters] = useState({
     codigoUsuario: '',
@@ -27,13 +58,21 @@ export default function RegistroAccesoList() {
 
   const [editMode, setEditMode] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const paginacion = usePaginacion(filtered);
 
-  // 🔹 Obtener todos los registros
+  useEffect(() => {
+    paginacion.irAPagina(1);
+  }, [filters.codigoUsuario, filters.fechaInicio, filters.fechaFin, paginacion.irAPagina]);
+
   async function fetchAll() {
     try {
-      const res = await getRegistrosAcceso();
-      setRegistros(res.data || []);
-      setFiltered(res.data || []);
+      const [resReg, resTipos] = await Promise.all([
+        getRegistrosAcceso(),
+        getTiposIngreso(),
+      ]);
+      setRegistros(resReg.data || []);
+      setFiltered(resReg.data || []);
+      setTiposIngreso(resTipos.data || []);
     } catch (error) {
       console.error('Error al obtener registros de acceso:', error);
     }
@@ -43,27 +82,23 @@ export default function RegistroAccesoList() {
     fetchAll();
   }, []);
 
-  // 🔍 Filtros
   function applyFilters() {
     let data = [...registros];
 
-    // Código usuario
     if (filters.codigoUsuario.trim() !== '') {
-      data = data.filter(r =>
-        r.codigoUsuario.toLowerCase().includes(filters.codigoUsuario.toLowerCase())
+      data = data.filter((r) =>
+        r.codigoUsuario.toLowerCase().includes(filters.codigoUsuario.toLowerCase()),
       );
     }
 
-    // Fecha inicio
     if (filters.fechaInicio !== '') {
       const start = new Date(filters.fechaInicio);
-      data = data.filter(r => new Date(r.entrada) >= start);
+      data = data.filter((r) => new Date(r.entrada) >= start);
     }
 
-    // Fecha fin
     if (filters.fechaFin !== '') {
       const end = new Date(filters.fechaFin);
-      data = data.filter(r => new Date(r.entrada) <= end);
+      data = data.filter((r) => new Date(r.entrada) <= end);
     }
 
     setFiltered(data);
@@ -73,33 +108,56 @@ export default function RegistroAccesoList() {
     applyFilters();
   }, [filters, registros]);
 
-  // 🔹 Guardar cambios (editar)
+  function opcionTipo(valor: string, onChange: (v: string) => void) {
+    return (
+      <select className="input" value={valor} onChange={(e) => onChange(e.target.value)}>
+        <option value="">(sin asignar)</option>
+        {tiposIngreso.map((t) => (
+          <option key={t.id} value={String(t.id)}>
+            {t.nombre}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await updateRegistroAcceso(formData.id, {
+      const payload: Record<string, unknown> = {
         codigoUsuario: formData.codigoUsuario,
-        modoAccesoId: Number(formData.modoAccesoId),
         entrada: new Date(formData.entrada),
         salida: new Date(formData.salida),
-      });
+        tipoIngresoEntradaId:
+          formData.tipoIngresoEntradaId === ''
+            ? null
+            : Number(formData.tipoIngresoEntradaId),
+        tipoIngresoSalidaId:
+          formData.tipoIngresoSalidaId === ''
+            ? null
+            : Number(formData.tipoIngresoSalidaId),
+      };
+
+      await updateRegistroAcceso(formData.id, payload);
 
       setShowModal(false);
       setEditMode(false);
-      setFormData({ id: 0, codigoUsuario: '', modoAccesoId: '', entrada: '', salida: '' });
+      setFormData({ ...vacioForm });
       await fetchAll();
     } catch (err: any) {
       console.error('Error al actualizar registro de acceso:', err?.response?.data || err.message);
-      alert('Error al actualizar registro.');
+      if (!yaTieneNotificacionError(err)) alert('Error al actualizar registro.');
     }
   }
 
-  // 🔹 Editar registro
   function handleEdit(registro: any) {
     setFormData({
       id: registro.id,
       codigoUsuario: registro.codigoUsuario,
-      modoAccesoId: registro.modoAccesoId,
+      tipoIngresoEntradaId:
+        registro.tipoIngresoEntradaId != null ? String(registro.tipoIngresoEntradaId) : '',
+      tipoIngresoSalidaId:
+        registro.tipoIngresoSalidaId != null ? String(registro.tipoIngresoSalidaId) : '',
       entrada: registro.entrada ? registro.entrada.substring(0, 16) : '',
       salida: registro.salida ? registro.salida.substring(0, 16) : '',
     });
@@ -107,7 +165,6 @@ export default function RegistroAccesoList() {
     setShowModal(true);
   }
 
-  // 🔹 Eliminar registro
   async function handleDelete(id: number) {
     if (confirm('¿Seguro que deseas eliminar este registro de acceso?')) {
       await deleteRegistroAcceso(id);
@@ -115,114 +172,79 @@ export default function RegistroAccesoList() {
     }
   }
 
+  const columnas: ColumnaResponsive<RegistroAcceso>[] = [
+    { key: 'id', header: 'No' },
+    { key: 'codigoUsuario', header: 'Código Usuario' },
+    {
+      key: 'tipoIngresoEntrada',
+      header: 'Tipo ingreso (entrada)',
+      render: (r) => r.tipoIngresoEntrada?.nombre ?? '—',
+    },
+    {
+      key: 'dispositivoEntrada',
+      header: 'Torniquete (entrada)',
+      render: (r) => r.dispositivoEntrada?.nombre ?? '—',
+    },
+    {
+      key: 'entrada',
+      header: 'Entrada',
+      render: (r) => new Date(r.entrada).toLocaleString(),
+    },
+    {
+      key: 'tipoIngresoSalida',
+      header: 'Tipo ingreso (salida)',
+      render: (r) => r.tipoIngresoSalida?.nombre ?? '—',
+    },
+    {
+      key: 'dispositivoSalida',
+      header: 'Torniquete (salida)',
+      render: (r) => r.dispositivoSalida?.nombre ?? '—',
+    },
+    {
+      key: 'salida',
+      header: 'Salida',
+      render: (r) => new Date(r.salida).toLocaleString(),
+    },
+    {
+      key: 'acciones',
+      header: 'Acciones',
+      apilarEnTarjeta: true,
+      render: (r) => (
+        <div className="table-actions">
+          <button onClick={() => handleEdit(r)} className="btn btn-warning" type="button">
+            <Pencil size={16} />
+          </button>
+          <button onClick={() => handleDelete(r.id)} className="btn btn-danger" type="button">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="container">
+      <h2 className="page-heading">Registros de Acceso</h2>
 
-      {/* TÍTULO */}
-      <h2 className="text-2xl font-bold mb-4">Registros de Acceso</h2>
+      <FiltroRegistroAcceso filtros={filters} onChange={setFilters} />
 
-      {/* 📌 FILTROS */}
-      {/*<div className="p-4 mb-6 rounded-xl border bg-gray-50">
-  <h3 className="font-semibold mb-3 flex items-center gap-2">
-    <Search size={18} /> Filtros
-  </h3>
-
-  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-
-    <div>
-      <label className="label">Código Usuario</label>
-      <input
-        type="text"
-        className="input"
-        value={filters.codigoUsuario}
-        onChange={e => setFilters({ ...filters, codigoUsuario: e.target.value })}
+      <ResponsiveTable
+        columnas={columnas}
+        filas={paginacion.filasPagina as RegistroAcceso[]}
+        mensajeVacio={
+          filtered.length === 0
+            ? 'No se encontraron registros con los filtros aplicados.'
+            : undefined
+        }
       />
-    </div>
+      <PaginacionTabla paginacion={paginacion} />
 
-    <div>
-      <label className="label">Fecha Inicio</label>
-      <input
-        type="date"
-        className="input"
-        value={filters.fechaInicio}
-        onChange={e => setFilters({ ...filters, fechaInicio: e.target.value })}
-      />
-    </div>
-
-    <div>
-      <label className="label">Fecha Fin</label>
-      <input
-        type="date"
-        className="input"
-        value={filters.fechaFin}
-        onChange={e => setFilters({ ...filters, fechaFin: e.target.value })}
-      />
-    </div>
-
-  </div>
-    </div> */}
-      
-      {/* TABLA */}
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Código Usuario</th>
-              <th>Modo Acceso</th>
-              <th>Entrada</th>
-              <th>Salida</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id}>
-                <td>{r.id}</td>
-                <td>{r.codigoUsuario}</td>
-                <td>{r.accessMode?.name || r.modoAccesoId}</td>
-                <td>{new Date(r.entrada).toLocaleString()}</td>
-                <td>{new Date(r.salida).toLocaleString()}</td>
-                <td>
-                  <div className="table-actions">
-                    <button
-                      onClick={() => handleEdit(r)}
-                      className="btn btn-warning"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(r.id)}
-                      className="btn btn-danger"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-4">
-                  No se encontraron registros con los filtros aplicados.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* MODAL EDICIÓN */}
       {showModal && (
         <div className="modal-backdrop">
           <div className="modal-content">
-            <h3 className="font-bold text-lg mb-4">
-              Editar Registro de Acceso
-            </h3>
+            <h3 className="font-bold text-lg mb-4">Editar Registro de Acceso</h3>
 
             <form onSubmit={handleSubmit}>
-
               <div className="form-control mb-3">
                 <label className="label">Código Usuario</label>
                 <input
@@ -235,14 +257,17 @@ export default function RegistroAccesoList() {
               </div>
 
               <div className="form-control mb-3">
-                <label className="label">Modo Acceso ID</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={formData.modoAccesoId}
-                  onChange={(e) => setFormData({ ...formData, modoAccesoId: e.target.value })}
-                  required
-                />
+                <label className="label">Tipo de ingreso (entrada)</label>
+                {opcionTipo(formData.tipoIngresoEntradaId, (v) =>
+                  setFormData({ ...formData, tipoIngresoEntradaId: v }),
+                )}
+              </div>
+
+              <div className="form-control mb-3">
+                <label className="label">Tipo de ingreso (salida)</label>
+                {opcionTipo(formData.tipoIngresoSalidaId, (v) =>
+                  setFormData({ ...formData, tipoIngresoSalidaId: v }),
+                )}
               </div>
 
               <div className="form-control mb-3">
@@ -273,13 +298,10 @@ export default function RegistroAccesoList() {
                   Actualizar
                 </button>
               </div>
-
             </form>
-
           </div>
         </div>
       )}
-
     </div>
   );
 }

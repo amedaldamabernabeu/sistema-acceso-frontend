@@ -1,142 +1,174 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { getPermissions, createPermission, updatePermission, deletePermission } from '../services/api';
-import { Pencil, Trash2, PlusCircle } from 'lucide-react';
 
+import { useEffect, useMemo, useState } from 'react';
+import { getPermissions } from '../services/api';
+import { agruparPermisosPorModulo, etiquetaModuloPermiso } from '../lib/permisos-modulo-ui';
+import { usePaginacion } from '@/lib/use-paginacion';
+import PaginacionTabla from '@/components/PaginacionTabla';
+import ResponsiveTable, { type ColumnaResponsive } from '@/components/ResponsiveTable';
+
+type PermisoFila = {
+  id: number;
+  name: string;
+  description: string | null;
+};
+
+type FilaTablaPermiso =
+  | { tipo: 'modulo'; key: string; modulo: string; cantidad: number }
+  | { tipo: 'permiso'; key: string; permiso: PermisoFila };
+
+/**
+ * Catálogo de permisos del sistema (solo lectura).
+ * Los permisos se gestionan en base de datos y se asignan a roles desde «Roles».
+ */
 export default function PermissionsList() {
-  const [permissions, setPermissions] = useState<any[]>([]);
-  const [showModal, setShowModal] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [formData, setFormData] = useState({ id: null, name: '', description: '' });
+  const [permissions, setPermissions] = useState<PermisoFila[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  async function fetchPermissions() {
-    const res = await getPermissions();
-    setPermissions(res.data || []);
-  }
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      setCargando(true);
+      setError(null);
+      try {
+        const res = await getPermissions();
+        if (!cancelado) {
+          setPermissions(Array.isArray(res.data) ? res.data : []);
+        }
+      } catch {
+        if (!cancelado) {
+          setError('No se pudieron cargar los permisos.');
+          setPermissions([]);
+        }
+      } finally {
+        if (!cancelado) setCargando(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, []);
 
-  useEffect(() => { fetchPermissions(); }, []);
+  const gruposPorModulo = useMemo(
+    () => agruparPermisosPorModulo(permissions),
+    [permissions],
+  );
+  const modulosOrdenados = useMemo(
+    () => [...gruposPorModulo.keys()].sort((a, b) => a.localeCompare(b, 'es')),
+    [gruposPorModulo],
+  );
 
-  function openCreateModal() {
-    setEditMode(false);
-    setFormData({ id: null, name: '', description: '' });
-    setShowModal(true);
-  }
-
-  function openEditModal(perm: any) {
-    setEditMode(true);
-    setFormData({ id: perm.id, name: perm.name, description: perm.description });
-    setShowModal(true);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (editMode) {
-      await updatePermission(formData.id!, { name: formData.name, description: formData.description });
-    } else {
-      await createPermission({ name: formData.name, description: formData.description });
+  const filasTabla = useMemo((): FilaTablaPermiso[] => {
+    const out: FilaTablaPermiso[] = [];
+    for (const modulo of modulosOrdenados) {
+      const filas = gruposPorModulo.get(modulo) ?? [];
+      out.push({ tipo: 'modulo', key: `h-${modulo}`, modulo, cantidad: filas.length });
+      for (const p of filas) {
+        out.push({ tipo: 'permiso', key: `p-${p.id}`, permiso: p });
+      }
     }
-    setShowModal(false);
-    await fetchPermissions();
+    return out;
+  }, [modulosOrdenados, gruposPorModulo]);
+
+  const paginacion = usePaginacion(filasTabla);
+
+  const columnas: ColumnaResponsive<FilaTablaPermiso>[] = [
+    {
+      key: 'id',
+      header: 'No',
+      render: (f) => (f.tipo === 'permiso' ? f.permiso.id : '—'),
+    },
+    {
+      key: 'identificador',
+      header: 'Identificador',
+      render: (f) =>
+        f.tipo === 'permiso' ? (
+          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13 }}>{f.permiso.name}</span>
+        ) : (
+          '—'
+        ),
+    },
+    {
+      key: 'descripcion',
+      header: 'Descripción',
+      render: (f) =>
+        f.tipo === 'permiso' ? (f.permiso.description ?? '—') : '—',
+    },
+  ];
+
+  function renderFilaTabla(fila: FilaTablaPermiso) {
+    if (fila.tipo === 'modulo') {
+      return (
+        <tr key={fila.key} className="table-section-header">
+          <td
+            colSpan={3}
+            style={{
+              textAlign: 'left',
+              fontWeight: 600,
+              paddingTop: '0.85rem',
+              paddingBottom: '0.35rem',
+              borderBottom: '1px solid var(--border, #e5e7eb)',
+              background: 'var(--card-bg, transparent)',
+            }}
+          >
+            {etiquetaModuloPermiso(fila.modulo)}
+            <span className="text-muted small" style={{ fontWeight: 400, marginLeft: 8 }}>
+              ({fila.cantidad})
+            </span>
+          </td>
+        </tr>
+      );
+    }
+    return null;
   }
 
-  async function handleDelete(id: number) {
-    if (confirm('¿Estás seguro de eliminar este permiso?')) {
-      await deletePermission(id);
-      await fetchPermissions();
+  function renderTarjeta(fila: FilaTablaPermiso) {
+    if (fila.tipo === 'modulo') {
+      return (
+        <div className="table-card--modulo">
+          {etiquetaModuloPermiso(fila.modulo)}
+          <span className="text-muted small" style={{ fontWeight: 400, marginLeft: 8 }}>
+            ({fila.cantidad})
+          </span>
+        </div>
+      );
     }
+    return null;
   }
 
   return (
     <div className="container">
       <div className="card">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Gestión de Permisos</h2>
-          <button onClick={openCreateModal} className="btn btn-primary">
-            <PlusCircle size={18} /> Nuevo Permiso
-          </button>
-        </div>
+        <h2 className="text-xl font-semibold mb-2">Permisos y módulos del sistema</h2>
+        <p className="text-muted small mb-4" style={{ maxWidth: 720 }}>
+          Lista de permisos disponibles para asignar a cada rol. Para conceder acceso a un
+          módulo, use la pantalla de <strong>Roles</strong> y agregue el permiso correspondiente
+          al rol del usuario.
+        </p>
 
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Nombre</th>
-                <th>Descripción</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {permissions.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.id}</td>
-                  <td>{p.name}</td>
-                  <td>{p.description}</td>
-                  <td>
-                    <div className="table-actions">
-                      <button
-  onClick={() => {
-    console.log('Editar permiso:', p);
-    openEditModal(p);
-  }}
-  className="btn btn-warning"
-  title="Editar permiso"
->
-  <Pencil size={16} />
-</button>
-                      <button onClick={() => handleDelete(p.id)} className="btn btn-danger" title="Eliminar permiso">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {permissions.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="text-center text-muted py-4">
-                    No hay permisos registrados.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {error && (
+          <p className="small" style={{ color: '#b91c1c', marginBottom: '0.75rem' }}>
+            {error}
+          </p>
+        )}
+
+        {cargando && <p className="text-muted">Cargando…</p>}
+
+        <ResponsiveTable
+          columnas={columnas}
+          filas={paginacion.filasPagina as FilaTablaPermiso[]}
+          idCampo="key"
+          renderFilaTabla={renderFilaTabla}
+          renderTarjeta={renderTarjeta}
+          mensajeVacio={
+            !cargando && permissions.length === 0
+              ? 'No hay permisos en el catálogo. Ejecute las migraciones de base de datos.'
+              : undefined
+          }
+        />
+        <PaginacionTabla paginacion={paginacion} />
       </div>
-
-      {/* Modal de Crear/Editar */}
-      {showModal && (
-        <div className="modal-backdrop">
-          <div className="modal-content">
-            <h3 className="text-lg font-semibold mb-3">
-              {editMode ? 'Editar Permiso' : 'Nuevo Permiso'}
-            </h3>
-
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-              <input
-                className="input"
-                placeholder="Nombre del permiso"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
-              <input
-                className="input"
-                placeholder="Descripción"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-              <div className="table-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>
-                  Cancelar
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editMode ? 'Actualizar' : 'Guardar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

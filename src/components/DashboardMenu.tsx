@@ -1,160 +1,110 @@
 'use client';
-import { useRouter } from 'next/navigation';
-import React from 'react';
-import {
-  BookOpen,
-  Users,
-  ShieldCheck,
-  KeyRound,
-  Laptop,
-  CalendarDays,
-  FileSearch,
-  Ban,
-  Cog,
-  ClipboardList,
-  NotebookPen,
-} from 'lucide-react';
 
-type ModuleItem = {
-  title: string;
-  description: string;
-  href: string;
-  color: string;
-  icon: any;
-};
+import React, { useCallback, useEffect, useState } from 'react';
+import { getDashboardResumen, type DashboardResumen } from '../services/api';
+import { paquetesDashboardVisiblesParaUsuario } from '@/data/dashboard-paquetes';
+import PaqueteModulosSeccion from '@/components/PaqueteModulosSeccion';
+import { useAuth } from '@/components/auth/AuthProvider';
 
-const modules: ModuleItem[] = [
-  {
-    title: 'Carrera - Departamento',
-    description: 'Asociar carreras con sus respectivos departamentos académicos.',
-    href: '/carrera-departamento',
-    color: '#2563eb',
-    icon: BookOpen,
-  },
-  {
-    title: 'Usuarios',
-    description: 'Gestiona las cuentas de usuario registradas en el sistema.',
-    href: '/users',
-    color: '#16a34a',
-    icon: Users,
-  },
-  {
-    title: 'Roles',
-    description: 'Define los roles del sistema y asigna permisos.',
-    href: '/roles',
-    color: '#f59e0b',
-    icon: ShieldCheck,
-  },
-  {
-    title: 'Permisos',
-    description: 'Controla qué acciones puede realizar cada rol.',
-    href: '/permissions',
-    color: '#7c3aed',
-    icon: KeyRound,
-  },
-  {
-    title: 'Modos de acceso',
-    description: 'Gestiona los modos de entrada y salida del centro.',
-    href: '/modo-acceso',
-    color: '#c91862',
-    icon: Cog,
-  },
-  {
-    title: 'Registros de acceso',
-    description: 'Consulta y administra los registros de acceso.',
-    href: '/registro-acceso',
-    color: '#6a70c2',
-    icon: FileSearch,
-  },
-  {
-    title: 'Suspensiones',
-    description: 'Gestiona las suspensiones activas.',
-    href: '/suspension',
-    color: '#c26a6a',
-    icon: Ban,
-  },
-  {
-    title: 'Tipos de Ingreso',
-    description: 'Administra los tipos de dispositivos de ingreso.',
-    href: '/tipos-ingreso',
-    color: '#7fc26a',
-    icon: Laptop,
-  },
-  {
-    title: 'Dispositivos de acceso',
-    description: 'Controla los dispositivos de acceso.',
-    href: '/dispositivos-acceso',
-    color: '#d0d4ce',
-    icon: CalendarDays,
-  },
-  {
-    title: 'Eventos',
-    description: 'Gestiona los eventos del centro.',
-    href: '/eventos',
-    color: '#e2510e',
-    icon: ClipboardList,
-  },
-  {
-    title: 'Notas',
-    description: 'Gestiona notas asociadas a eventos y accesos.',
-    href: '/notas',
-    color: '#392bb6',
-    icon: NotebookPen,
+function maxSerieValor(serie: DashboardResumen['serieUltimosDias']): number {
+  let m = 1;
+  for (const d of serie) {
+    m = Math.max(m, d.entradas, d.salidas);
   }
-];
+  return m;
+}
 
 export default function DashboardMenu() {
-  const router = useRouter();
+  const { user, loading } = useAuth();
+  const [resumen, setResumen] = useState<DashboardResumen | null>(null);
+  const [cargandoResumen, setCargandoResumen] = useState(true);
+  const [errorResumen, setErrorResumen] = useState<string | null>(null);
+
+  const cargarResumen = useCallback(async () => {
+    setCargandoResumen(true);
+    setErrorResumen(null);
+    try {
+      const { data } = await getDashboardResumen();
+      setResumen(data);
+    } catch {
+      setErrorResumen(
+        'No se pudieron cargar las métricas. Verifique sesión y API.',
+      );
+      setResumen(null);
+    } finally {
+      setCargandoResumen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void cargarResumen();
+  }, [cargarResumen]);
+
+  const entradasHoy = resumen?.entradasHoy ?? 0;
+  const salidasHoy = resumen?.salidasHoy ?? 0;
+  const totalHoy = Math.max(1, entradasHoy + salidasHoy);
+  const pctEntradas = (entradasHoy / totalHoy) * 360;
+  const donutStyle: React.CSSProperties =
+    entradasHoy + salidasHoy === 0
+      ? {
+          background:
+            'conic-gradient(#e2e8f0 0deg 360deg)',
+        }
+      : {
+          background: `conic-gradient(#16a34a 0deg ${pctEntradas}deg, #0b5cff ${pctEntradas}deg 360deg)`,
+        };
+
+  const serie = resumen?.serieUltimosDias ?? [];
+  const maxBar = maxSerieValor(serie);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 30 }}>
-
-      {/* ======================= ENCABEZADO ======================= */}
+    <div
+      className="dashboard-menu-root"
+      style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}
+    >
       <div
         style={{
-          width: "100%",
+          width: '100%',
           height: 90,
           borderRadius: 12,
-          backgroundImage: "url('/tu-imagen.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          position: "relative",
-          overflow: "hidden",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+          backgroundImage: "url('/fondo.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
+          backgroundRepeat: 'no-repeat',
+          position: 'relative',
+          overflow: 'hidden',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
         }}
       >
-        {/* Capa oscura para suavizar */}
         <div
           style={{
-            position: "absolute",
+            position: 'absolute',
             inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            backdropFilter: "blur(2px)",
+            background: 'rgba(0,0,0,0.45)',
           }}
         />
-
-        {/* LETRERO MARQUEE */}
         <div
           style={{
-            position: "absolute",
+            position: 'absolute',
             bottom: 20,
-            width: "100%",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
+            width: '100%',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
           }}
         >
           <div
             style={{
-              display: "inline-block",
-              paddingLeft: "100%",
-              animation: "marquee 15s linear infinite",
+              display: 'inline-block',
+              paddingLeft: '100%',
+              animation: 'marquee 15s linear infinite',
               fontSize: 28,
-              fontWeight: "bold",
-              color: "white",
+              fontWeight: 'bold',
+              color: 'white',
               letterSpacing: 1,
             }}
           >
-            Sistema de gestión de acceso al Centro Universitario de Los Valles (CUVALLES)
+            Sistema de gestión de acceso al Centro Universitario de Los Valles
+            (CUVALLES)
           </div>
         </div>
       </div>
@@ -168,115 +118,186 @@ export default function DashboardMenu() {
         `}
       </style>
 
-      {/* ======================= TARJETAS SUPERIORES ======================= */}
-      <div
-        style={{
-          display: 'grid',
-          gap: 20,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        }}
-      >
-        {[
-          { title: 'Entradas hoy', value: 0, color: '#16a34a' },
-          { title: 'Salidas hoy', value: 0, color: '#2563eb' },
-          { title: 'Usuarios activos', value: 0, color: '#7c3aed' },
-          { title: 'Suspensiones', value: 0, color: '#dc2626' },
-        ].map((kpi) => (
-          <div
-            key={kpi.title}
+      <div className="dashboard-home">
+        <section className="card">
+          <h2
             style={{
-              padding: 20,
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.9)',
-              boxShadow: '0 8px 20px rgba(2,6,23,0.08)',
-              border: '1px solid rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-            }}
-          >
-            <span style={{ fontSize: 16, color: '#6b7280', fontWeight: "bold" }}>
-              {kpi.title}
-            </span>
-            <strong style={{ fontSize: 32, color: kpi.color }}>{kpi.value}</strong>
-          </div>
-        ))}
-      </div>
-
-      {/* ======================= MODULOS ======================= */}
-      <div
-        style={{
-          display: 'grid',
-          gap: 20,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-        }}
-      >
-        {modules.map((m) => (
-          <div
-            key={m.href}
-            role="button"
-            onClick={() => router.push(m.href)}
-            onKeyDown={(e) => { if (e.key === 'Enter') router.push(m.href); }}
-            tabIndex={0}
-            style={{
-              cursor: 'pointer',
-              padding: 20,
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.9)',
-              boxShadow: '0 8px 20px rgba(2,6,23,0.08)',
-              border: '1px solid rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
+              margin: '0 0 0.75rem',
+              fontSize: '1.15rem',
+              color: 'var(--text, #0f172a)',
               textAlign: 'center',
-              gap: 10,
-              transition: 'transform .12s ease, box-shadow .12s ease',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)';
-              (e.currentTarget as HTMLElement).style.boxShadow = '0 12px 34px rgba(2,6,23,0.12)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
-              (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 20px rgba(2,6,23,0.08)';
             }}
           >
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 12,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: `${m.color}20`,
-              }}
-            >
-              <m.icon size={28} color={m.color} />
+            Indicadores del día
+          </h2>
+          {errorResumen && (
+            <p style={{ color: '#b91c1c', marginBottom: '0.75rem' }}>
+              {errorResumen}
+            </p>
+          )}
+          <div className="dashboard-home-metrics">
+            {[
+              {
+                title: 'Entradas hoy',
+                value: cargandoResumen ? '…' : entradasHoy,
+                color: '#16a34a',
+              },
+              {
+                title: 'Salidas hoy',
+                value: cargandoResumen ? '…' : salidasHoy,
+                color: '#0b5cff',
+              },
+              {
+                title: 'Usuarios activos',
+                value: cargandoResumen ? '…' : (resumen?.usuariosActivos ?? 0),
+                color: '#7c3aed',
+              },
+              {
+                title: 'Suspensiones activas',
+                value: cargandoResumen ? '…' : (resumen?.suspensionesActivas ?? 0),
+                color: '#dc2626',
+              },
+            ].map((kpi) => (
+              <div
+                key={kpi.title}
+                className="card"
+                style={{ padding: '1rem', margin: 0 }}
+              >
+                <span
+                  style={{
+                    fontSize: 14,
+                    color: '#64748b',
+                    fontWeight: 600,
+                  }}
+                >
+                  {kpi.title}
+                </span>
+                <strong
+                  style={{
+                    fontSize: 30,
+                    color: kpi.color,
+                    display: 'block',
+                    marginTop: 4,
+                  }}
+                >
+                  {kpi.value}
+                </strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="dashboard-home-visual" style={{ marginTop: '1rem' }}>
+            <div className="card dashboard-donut-wrap" style={{ margin: 0 }}>
+              <span style={{ fontWeight: 600, color: '#475569' }}>
+                Hoy: entradas vs salidas
+              </span>
+              <div className="dashboard-donut" style={donutStyle} />
+              <div
+                style={{
+                  fontSize: 13,
+                  color: '#64748b',
+                  display: 'flex',
+                  gap: '1rem',
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                }}
+              >
+                <span>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: '#16a34a',
+                      marginRight: 6,
+                    }}
+                  />
+                  Entradas {entradasHoy}
+                </span>
+                <span>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: '#0b5cff',
+                      marginRight: 6,
+                    }}
+                  />
+                  Salidas {salidasHoy}
+                </span>
+              </div>
             </div>
 
-            <h3 style={{ margin: 0, fontSize: 18 }}>{m.title}</h3>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-              {m.description}
-            </p>
-
-            <button
-              onClick={(e) => { e.stopPropagation(); router.push(m.href); }}
-              style={{
-                marginTop: 12,
-                padding: '8px 14px',
-                borderRadius: 8,
-                border: 'none',
-                background: m.color,
-                color: '#fff',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Ir al módulo
-            </button>
+            <div className="card" style={{ margin: 0 }}>
+              <span style={{ fontWeight: 600, color: '#475569' }}>
+                Últimos 7 días
+              </span>
+              <div style={{ marginTop: '0.75rem' }}>
+                {cargandoResumen && (
+                  <p style={{ color: '#64748b', margin: 0 }}>Cargando serie…</p>
+                )}
+                {!cargandoResumen &&
+                  serie.map((d) => (
+                    <div key={d.etiqueta} className="dashboard-bars-day">
+                      <div className="dashboard-bars-row">
+                        <span style={{ width: 88, flexShrink: 0 }}>
+                          {d.etiqueta}
+                        </span>
+                        <span style={{ width: 36, textAlign: 'right' }}>
+                          {d.entradas}
+                        </span>
+                        <div className="dashboard-bars-track">
+                          <div
+                            className="dashboard-bars-fill-ent"
+                            style={{
+                              width: `${Math.round((d.entradas / maxBar) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="dashboard-bars-row">
+                        <span style={{ width: 88, flexShrink: 0 }} />
+                        <span style={{ width: 36, textAlign: 'right' }}>
+                          {d.salidas}
+                        </span>
+                        <div className="dashboard-bars-track">
+                          <div
+                            className="dashboard-bars-fill-sal"
+                            style={{
+                              width: `${Math.round((d.salidas / maxBar) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
           </div>
-        ))}
+        </section>
+
+        <h2
+          style={{
+            margin: 0,
+            fontSize: '1.15rem',
+            color: 'var(--text, #0f172a)',
+            textAlign: 'center',
+          }}
+        >
+          Módulos del sistema
+        </h2>
+
+        <div className="dashboard-paquetes-mosaico">
+          {(loading && !user
+            ? []
+            : paquetesDashboardVisiblesParaUsuario(user ?? null)
+          ).map((paq) => (
+            <PaqueteModulosSeccion key={paq.id} paq={paq} />
+          ))}
+        </div>
       </div>
     </div>
   );

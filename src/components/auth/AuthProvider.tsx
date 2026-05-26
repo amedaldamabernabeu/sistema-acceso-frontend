@@ -1,6 +1,6 @@
 'use client';
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import api from '../../services/api';
+import api, { getMe } from '../../services/api';
 
 type User = any | null;
 
@@ -35,10 +35,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       // api interceptor debe adjuntar Authorization desde localStorage
-      const res = await api.get('/users/me');
+      const res = await getMe();
+      if (res.data?.active === false) {
+        setToken(null);
+        setUser(null);
+        return;
+      }
       setUser(res.data);
     } catch (err) {
-      // si falla obtener user dejamos user=null (pero no forzamos logout automático)
+      setToken(null);
       setUser(null);
     } finally {
       setLoading(false);

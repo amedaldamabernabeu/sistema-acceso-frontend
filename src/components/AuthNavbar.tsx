@@ -3,13 +3,18 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useAuth } from './auth/AuthProvider';
+import { paquetesDashboardVisiblesParaUsuario } from '@/data/dashboard-paquetes';
 
 export default function AuthNavbar() {
   const pathname = usePathname();
   const { user, token, loading, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
-  console.log("USER:", user);
+  const paquetesNav =
+    loading && !user
+      ? []
+      : paquetesDashboardVisiblesParaUsuario(user ?? null);
+
   if (!token) return null;
 
   return (
@@ -38,7 +43,26 @@ export default function AuthNavbar() {
 
       {/* NAV SIMPLIFICADO */}
       <nav className={`nav-links ${open ? 'open' : ''}`} aria-label="Main nav">
-        <Link className={pathname === '/' ? 'active' : ''} href="/">Inicio</Link>
+        <Link
+          className={pathname === '/' ? 'active' : ''}
+          href="/"
+          onClick={() => setOpen(false)}
+        >
+          Inicio
+        </Link>
+        {paquetesNav.map((p) => {
+          const hrefPaquete = `/dashboard/paquete/${p.id}`;
+          return (
+            <Link
+              key={p.id}
+              className={pathname === hrefPaquete ? 'active' : ''}
+              href={hrefPaquete}
+              onClick={() => setOpen(false)}
+            >
+              {p.titulo}
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="nav-actions">
@@ -109,7 +133,7 @@ export default function AuthNavbar() {
         }
 
         .nav-links a.active {
-          background: #2563eb; !important;
+          background: #2563eb !important;
           color: white !important;
         }
 

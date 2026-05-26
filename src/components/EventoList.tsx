@@ -1,6 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { yaTieneNotificacionError } from '@/lib/ya-tiene-notificacion-error';
+import { mostrarNotificacion } from '@/lib/notificaciones';
+import {
+  eventoDuplicado,
+  fechaHoraEventoNoPasada,
+  minDatetimeLocalAhora,
+  normalizarNombreEvento,
+  normalizarUbicacionEvento,
+} from '@/lib/evento-validaciones';
+import { useEffect, useMemo, useState } from 'react';
+import { filtrarPorTexto } from '@/lib/filtrar-por-texto';
+import FiltroTabla from '@/components/FiltroTabla';
 import {
   getEventos,
   createEvento,
@@ -8,9 +19,27 @@ import {
   deleteEvento,
 } from '../services/api';
 import { Pencil, Trash2 } from 'lucide-react';
+import { usePaginacion } from '@/lib/use-paginacion';
+import PaginacionTabla from '@/components/PaginacionTabla';
+import ResponsiveTable, { type ColumnaResponsive } from '@/components/ResponsiveTable';
+
+type Evento = { id: number; nombre: string; fechaHora: string; ubicacion: string };
 
 export default function EventoList() {
   const [eventos, setEventos] = useState<any[]>([]);
+  const [busquedaTabla, setBusquedaTabla] = useState('');
+  const eventosFiltrados = useMemo(
+    () =>
+      filtrarPorTexto(eventos, busquedaTabla, (e) =>
+        [e.nombre, e.ubicacion, e.fechaHora].join(' '),
+      ),
+    [eventos, busquedaTabla],
+  );
+  const paginacion = usePaginacion(eventosFiltrados);
+
+  useEffect(() => {
+    paginacion.irAPagina(1);
+  }, [busquedaTabla, paginacion.irAPagina]);
 
   const [formData, setFormData] = useState({
     id: 0,
@@ -28,7 +57,7 @@ export default function EventoList() {
       setEventos(res.data || []);
     } catch (err: any) {
       console.error('Error al obtener eventos:', err?.response?.data || err.message);
-      alert('Error al cargar los eventos.');
+      if (!yaTieneNotificacionError(err)) alert('Error al cargar los eventos.');
     }
   }
 
@@ -40,10 +69,29 @@ export default function EventoList() {
     e.preventDefault();
 
     const payload = {
-      nombre: formData.nombre,
+      nombre: normalizarNombreEvento(formData.nombre),
       fechaHora: formData.fechaHora,
-      ubicacion: formData.ubicacion,
+      ubicacion: normalizarUbicacionEvento(formData.ubicacion),
     };
+
+    if (!fechaHoraEventoNoPasada(payload.fechaHora)) {
+      mostrarNotificacion({
+        tipo: 'error',
+        mensaje:
+          'La fecha y hora del evento debe ser igual o posterior al momento actual.',
+      });
+      return;
+    }
+    if (
+      eventoDuplicado(eventos, payload, editMode ? formData.id : 0)
+    ) {
+      mostrarNotificacion({
+        tipo: 'error',
+        mensaje:
+          'Ya existe un evento con el mismo nombre, fecha, hora y ubicación.',
+      });
+      return;
+    }
 
     try {
       if (editMode) {
@@ -57,9 +105,9 @@ export default function EventoList() {
       setFormData({ id: 0, nombre: '', fechaHora: '', ubicacion: '' });
 
       await fetchAll();
-    } catch (err: any) {
-      console.error('Error al guardar evento:', err?.response?.data || err.message);
-      alert('Error al guardar evento.');
+    } catch (err: unknown) {
+      console.error(err);
+      if (!yaTieneNotificacionError(err)) alert('Error al guardar evento.');
     }
   }
 
@@ -82,16 +130,42 @@ export default function EventoList() {
         await fetchAll();
       } catch (err: any) {
         console.error('Error al eliminar evento:', err?.response?.data || err.message);
-        alert('Error al eliminar evento.');
+        if (!yaTieneNotificacionError(err)) alert('Error al eliminar evento.');
       }
     }
   }
 
+  const columnas: ColumnaResponsive<Evento>[] = [
+    { key: 'id', header: 'No' },
+    { key: 'nombre', header: 'Nombre' },
+    {
+      key: 'fechaHora',
+      header: 'Fecha y Hora',
+      render: (e) => new Date(e.fechaHora).toLocaleString(),
+    },
+    { key: 'ubicacion', header: 'Ubicación' },
+    {
+      key: 'acciones',
+      header: 'Acciones',
+      apilarEnTarjeta: true,
+      render: (e) => (
+        <div className="table-actions">
+          <button className="btn btn-warning" onClick={() => handleEdit(e)} type="button">
+            <Pencil size={16} />
+          </button>
+          <button className="btn btn-danger" onClick={() => handleDelete(e.id)} type="button">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="container">
-      <h2 className="text-2xl font-bold mb-4">Gestión de Eventos</h2>
+      <h2 className="page-heading">Gestión de Eventos</h2>
 
-      <div className="flex justify-end mb-6 mr-10">
+      <div className="panel-toolbar">
         <button
           onClick={() => {
             setEditMode(false);
@@ -99,52 +173,26 @@ export default function EventoList() {
             setShowModal(true);
           }}
           className="btn btn-primary"
+          type="button"
         >
           Crear Evento
         </button>
       </div>
-      <br></br>
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>Fecha y Hora</th>
-              <th>Ubicación</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {eventos.map((e) => (
-              <tr key={e.id}>
-                <td>{e.id}</td>
-                <td>{e.nombre}</td>
-                <td>{new Date(e.fechaHora).toLocaleString()}</td>
-                <td>{e.ubicacion}</td>
-                <td>
-                  <div className="table-actions">
-                    <button
-                      className="btn btn-warning"
-                      onClick={() => handleEdit(e)}
-                    >
-                      <Pencil size={16} />
-                    </button>
-
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => handleDelete(e.id)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <FiltroTabla
+        valor={busquedaTabla}
+        onChange={setBusquedaTabla}
+        placeholder="Buscar por nombre, ubicación o fecha…"
+      />
+      <ResponsiveTable
+        columnas={columnas}
+        filas={paginacion.filasPagina as Evento[]}
+        mensajeVacio={
+          eventos.length > 0 && eventosFiltrados.length === 0
+            ? 'Sin resultados para la búsqueda.'
+            : undefined
+        }
+      />
+      <PaginacionTabla paginacion={paginacion} />
 
       {/* MODAL */}
       {showModal && (
@@ -175,6 +223,7 @@ export default function EventoList() {
                   type="datetime-local"
                   className="input"
                   value={formData.fechaHora}
+                  min={editMode ? undefined : minDatetimeLocalAhora()}
                   onChange={(e) => setFormData({ ...formData, fechaHora: e.target.value })}
                   required
                 />

@@ -1,54 +1,110 @@
 'use client';
+
 import React from 'react';
 
-type Column<T> = {
+export type ColumnaResponsive<T> = {
   key: string;
   header: string;
   render?: (row: T) => React.ReactNode;
+  /** En móvil: etiqueta arriba y valor a ancho completo (útil para roles, permisos, etc.). */
+  apilarEnTarjeta?: boolean;
+  ocultarEnTarjeta?: boolean;
 };
 
-export default function ResponsiveTable<T extends Record<string, any>>(props: {
-  columns: Column<T>[];
-  rows: T[];
-  idKey?: string; // key para el atributo key
-}) {
-  const { columns, rows, idKey = 'id' } = props;
+type Props<T> = {
+  columnas: ColumnaResponsive<T>[];
+  filas: T[];
+  idCampo?: string;
+  className?: string;
+  mensajeVacio?: React.ReactNode;
+  /** Fila de tabla personalizada (p. ej. encabezados de módulo en permisos). Si devuelve null, se usa el layout por columnas. */
+  renderFilaTabla?: (fila: T, indice: number) => React.ReactNode | null;
+  /** Tarjeta móvil personalizada. Si devuelve null, se usa el layout por columnas. */
+  renderTarjeta?: (fila: T, indice: number) => React.ReactNode | null;
+};
+
+function valorCelda<T>(columna: ColumnaResponsive<T>, fila: T): React.ReactNode {
+  if (columna.render) return columna.render(fila);
+  const raw = (fila as Record<string, unknown>)[columna.key];
+  return raw == null || raw === '' ? '—' : String(raw);
+}
+
+function claveFila<T extends Record<string, unknown>>(fila: T, idCampo: string, indice: number): string {
+  const id = fila[idCampo];
+  if (id != null) return String(id);
+  return `fila-${indice}`;
+}
+
+export default function ResponsiveTable<T extends Record<string, unknown>>({
+  columnas,
+  filas,
+  idCampo = 'id',
+  className = '',
+  mensajeVacio,
+  renderFilaTabla,
+  renderTarjeta,
+}: Props<T>) {
+  const columnasTarjeta = columnas.filter((c) => !c.ocultarEnTarjeta);
 
   return (
-    <div className="table-wrapper page-section">
-      {/* DESKTOP TABLE */}
-      <table>
+    <div className={`table-wrapper table-wrapper--responsive ${className}`.trim()}>
+      <table className="table-desktop">
         <thead>
           <tr>
-            {columns.map((c) => <th key={c.key}>{c.header}</th>)}
+            {columnas.map((c) => (
+              <th key={c.key}>{c.header}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={String(r[idKey] ?? JSON.stringify(r))}>
-              {columns.map((c) => (
-                <td key={c.key}>
-                  {c.render ? c.render(r) : String(r[c.key] ?? '')}
-                </td>
-              ))}
+          {filas.length === 0 && mensajeVacio != null ? (
+            <tr>
+              <td colSpan={columnas.length}>{mensajeVacio}</td>
             </tr>
-          ))}
+          ) : (
+            filas.map((fila, indice) => {
+              const personalizada = renderFilaTabla?.(fila, indice);
+              if (personalizada != null) return personalizada;
+              return (
+                <tr key={claveFila(fila, idCampo, indice)}>
+                  {columnas.map((c) => (
+                    <td key={c.key}>{valorCelda(c, fila)}</td>
+                  ))}
+                </tr>
+              );
+            })
+          )}
         </tbody>
       </table>
 
-      {/* MOBILE CARDS */}
-      <div className="table-cards" aria-hidden={false}>
-        {rows.map((r) => (
-          <div className="table-card" key={String(r[idKey] ?? JSON.stringify(r))}>
-            {columns.map((c) => (
-              <div className="row" key={c.key}>
-                <div className="label">{c.header}</div>
-                <div className="value">{c.render ? c.render(r) : String(r[c.key] ?? '')}</div>
+      <div className="table-cards">
+        {filas.length === 0 && mensajeVacio != null ? (
+          <div className="table-card table-card--vacio">{mensajeVacio}</div>
+        ) : (
+          filas.map((fila, indice) => {
+            const tarjetaPersonalizada = renderTarjeta?.(fila, indice);
+            if (tarjetaPersonalizada != null) {
+              return (
+                <div className="table-card" key={`card-${claveFila(fila, idCampo, indice)}`}>
+                  {tarjetaPersonalizada}
+                </div>
+              );
+            }
+            return (
+              <div className="table-card" key={`card-${claveFila(fila, idCampo, indice)}`}>
+                {columnasTarjeta.map((c) => (
+                  <div
+                    key={c.key}
+                    className={`table-card-row${c.apilarEnTarjeta ? ' table-card-row--stacked' : ''}`}
+                  >
+                    <div className="table-card-label">{c.header}</div>
+                    <div className="table-card-value">{valorCelda(c, fila)}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-            {/* opcional area de acciones (si usas columna key 'actions') */}
-          </div>
-        ))}
+            );
+          })
+        )}
       </div>
     </div>
   );

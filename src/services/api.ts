@@ -1,4 +1,5 @@
-import axios from 'axios'
+import axios from 'axios';
+import { registrarInterceptorErroresApi } from '@/lib/registrar-interceptor-errores-api';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3000',
@@ -16,11 +17,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+registrarInterceptorErroresApi(api);
+
 
 //Para el loguin
 export const authLogin = (payload: { email: string; password: string }) =>
-  api.post('/auth/login', payload);
-export const getMe = () => api.get('/users/me'); // opcional si tienes /users/me
+  api.post('/auth/login', payload, { skipNotificacionError: true });
+export const getMe = () =>
+  api.get('/users/me', { skipNotificacionError: true });
 
 //------------------------------------------------------------------------------------
 
@@ -128,35 +132,14 @@ export const deleteCarreraDepartamento = (id: number) =>
 
 //-----------------------------------------------------------------------------------------------------------------
 
-/* Modos de Acceso */
-
-// Obtener todos los modos de acceso
-export const getModosAcceso = () => api.get('/access-modes');
-
-// Crear modo de acceso
-export const createModoAcceso = (data: { name: string}) =>
-  api.post('/access-modes', data);
-
-// Obtener modo de acceso por ID
-export const getModoAcceso = (id: number) => api.get(`/access-modes/${id}`);
-
-// Actualizar modo de acceso
-export const updateModoAcceso = (id: number, data: { name?: string }) =>
-  api.patch(`/access-modes/${id}`, data);
-
-// Eliminar modo de acceso
-export const deleteModoAcceso = (id: number) => api.delete(`/access-modes/${id}`);
-
-//-----------------------------------------------------------------------------------------------------------------
-
 // Registro de Acceso
 
 //Listar registros de acceso
 export const getRegistrosAcceso = () => api.get('/registro-acceso');
 
 //Actualizar registro de acceso
-export const updateRegistroAcceso = (id: number, data: any) =>
-  api.patch('/registro-acceso/${id}', data);
+export const updateRegistroAcceso = (id: number, data: Record<string, unknown>) =>
+  api.put(`/registro-acceso/${id}`, data);
 
 //Eliminar registro de acceso
 export const deleteRegistroAcceso = (id: number) =>
@@ -191,7 +174,119 @@ export async function deleteSuspension(id: number) {
 export const buscarUsuarios = (nombre: string) =>
   api.get(`/suspension/usuarios?nombre=${nombre}`);
 
+//-------------------------------------------------------------------------------------------------------
+
+/** Tipos de reporte alineados con el backend (`ReportesController`). */
+export type TipoReporteApi =
+  | 'usuarios'
+  | 'eventos'
+  | 'registros-acceso'
+  | 'suspensiones'
+  | 'dispositivos-acceso'
+  | 'visitantes'
+  | 'notas'
+  | 'roles'
+  | 'tipos-ingreso'
+  | 'carrera-departamento';
+
+export type ConsultaReporteParams = {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  nombre?: string;
+};
+
+/** Vista previa JSON (requiere JWT). */
+export const getReportePreview = (tipo: TipoReporteApi, params: ConsultaReporteParams) =>
+  api.get(`/reportes/${tipo}/preview`, { params });
+
+/** Exportación PDF o Excel como Blob (requiere JWT). */
+export const getReporteExportBlob = (
+  tipo: TipoReporteApi,
+  formato: 'pdf' | 'excel',
+  params: ConsultaReporteParams,
+) =>
+  api.get(`/reportes/${tipo}/export`, {
+    params: { ...params, formato },
+    responseType: 'blob',
+  });
+
+// --- Visitantes (público: sin JWT requerido en el cliente) ---
+export type RegistroVisitantePayload = {
+  nombre: string;
+  correo: string;
+  telefono: string;
+  areaVisitar: string;
+  eventoId?: number;
+};
+
+export const getVisitantesCatalogoEventos = () =>
+  api.get('/visitantes/catalogo/eventos');
+
+export const postVisitanteRegistroPublico = (data: RegistroVisitantePayload) =>
+  api.post('/visitantes/registro-publico', data);
+
+export type ResultadoValidacionQr = 'entrada' | 'salida' | 'denegado';
+
+export const postVisitanteValidarQr = (token: string) =>
+  api.post<{
+    resultado: ResultadoValidacionQr;
+    mensaje: string;
+    motivo?: string;
+    visitante?: {
+      nombre: string;
+      correo: string;
+      telefono: string;
+      areaVisitar: string;
+      eventoNombre: string | null;
+      expiraEn: string;
+    };
+  }>('/visitantes/validar-qr', { token });
+
+export type QueryVisitantesParams = {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  eventoId?: number;
+  activo?: 'true' | 'false';
+};
+
+export const getVisitantes = (params?: QueryVisitantesParams) =>
+  api.get('/visitantes', { params });
+
+export const postVisitante = (data: RegistroVisitantePayload) =>
+  api.post('/visitantes', data);
+
+export const getVisitante = (id: number) => api.get(`/visitantes/${id}`);
+
+export type ActualizarVisitantePayload = Partial<
+  Omit<RegistroVisitantePayload, 'eventoId'>
+> & {
+  activo?: boolean;
+  eventoId?: number | null;
+};
+
+export const patchVisitante = (id: number, data: ActualizarVisitantePayload) =>
+  api.patch(`/visitantes/${id}`, data);
+
+export const deleteVisitante = (id: number) => api.delete(`/visitantes/${id}`);
+
+export const getVisitanteQrBlob = (id: number) =>
+  api.get(`/visitantes/qr/${id}`, { responseType: 'blob' });
+
 export default api;
+
+//-------------------------------------------------------------------------------------------------------
+
+/** Resumen del panel principal (JWT). */
+export type DashboardResumen = {
+  entradasHoy: number;
+  salidasHoy: number;
+  usuariosActivos: number;
+  suspensionesActivas: number;
+  serieUltimosDias: { etiqueta: string; entradas: number; salidas: number }[];
+};
+
+export const getDashboardResumen = () =>
+  api.get<DashboardResumen>('/dashboard/resumen');
 
 //-------------------------------------------------------------------------------------------------------
 
@@ -203,23 +298,32 @@ export const createTipoIngreso = (data: { nombre: string }) =>
   api.post('/tipo-ingreso', data);
 
 export const updateTipoIngreso = (id: number, data: { nombre: string }) =>
-  api.put(`/tipo-ingreso/${id}`, data);
+  api.patch(`/tipo-ingreso/${id}`, data);
 
 export const deleteTipoIngreso = (id: number) =>
   api.delete(`/tipo-ingreso/${id}`);
 
 //------------------------------------------------------------------------------------------------------
 
+export type DispositivoAccesoPayload = {
+  nombre: string;
+  tipoIngresoIds: number[];
+  activo?: boolean;
+};
+
 // --- Dispositivos de acceso ---
 export async function getDispositivos() {
   return api.get('/dispositivos-acceso');
 }
 
-export async function createDispositivo(data: any) {
+export async function createDispositivo(data: DispositivoAccesoPayload) {
   return api.post('/dispositivos-acceso', data);
 }
 
-export async function updateDispositivo(id: number, data: any) {
+export async function updateDispositivo(
+  id: number,
+  data: Partial<DispositivoAccesoPayload>,
+) {
   return api.patch(`/dispositivos-acceso/${id}`, data);
 }
 

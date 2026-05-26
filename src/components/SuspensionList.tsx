@@ -1,5 +1,15 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { yaTieneNotificacionError } from '@/lib/ya-tiene-notificacion-error';
+import { mostrarNotificacion } from '@/lib/notificaciones';
+import {
+  fechasSuspensionValidas,
+  filtrarTextoSoloNombre,
+  PATRON_NOMBRE_BUSQUEDA_HTML,
+  usuarioTieneSuspensionActivaPendiente,
+} from '@/lib/suspension-validaciones';
+import { useEffect, useMemo, useState } from 'react';
+import { filtrarPorTexto } from '@/lib/filtrar-por-texto';
+import FiltroTabla from '@/components/FiltroTabla';
 import {
   getSuspensiones,
   createSuspension,
@@ -8,11 +18,41 @@ import {
   buscarUsuarios, // 👈 nuevo servicio
 } from '../services/api';
 import { Pencil, Trash2 } from 'lucide-react';
+import { usePaginacion } from '@/lib/use-paginacion';
+import PaginacionTabla from '@/components/PaginacionTabla';
+import ResponsiveTable, { type ColumnaResponsive } from '@/components/ResponsiveTable';
+
+type Suspension = {
+  id: number;
+  codigo: string;
+  motivo: string;
+  fechaInicio: string;
+  fechaFin: string;
+};
 
 export default function SuspensionList() {
   const [suspensiones, setSuspensiones] = useState<any[]>([]);
+  const [busquedaTabla, setBusquedaTabla] = useState('');
+  const suspensionesFiltradas = useMemo(
+    () =>
+      filtrarPorTexto(suspensiones, busquedaTabla, (s) =>
+        [
+          s.codigo,
+          s.motivo,
+          s.fechaInicio,
+          s.fechaFin,
+          s.activa === false ? 'inactiva' : 'activa',
+        ].join(' '),
+      ),
+    [suspensiones, busquedaTabla],
+  );
+  const paginacion = usePaginacion(suspensionesFiltradas);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [busqueda, setBusqueda] = useState('');
+
+  useEffect(() => {
+    paginacion.irAPagina(1);
+  }, [busquedaTabla, paginacion.irAPagina]);
 
   const [formData, setFormData] = useState({
     id: 0,
@@ -37,7 +77,8 @@ export default function SuspensionList() {
   // ==========================
   // 🔍 Buscar usuarios externos
   // ==========================
-  async function handleBuscarUsuario(nombre: string) {
+  async function handleBuscarUsuario(valorCrudo: string) {
+    const nombre = filtrarTextoSoloNombre(valorCrudo);
     setBusqueda(nombre);
 
     if (nombre.trim().length < 2) {
@@ -53,7 +94,10 @@ export default function SuspensionList() {
   // Seleccionar usuario
   // ==========================
   function seleccionarUsuario(u: any) {
-    setFormData({ ...formData, codigo: u.codigo ?? u.usuario });
+    setFormData({
+      ...formData,
+      codigo: String(u.codigo ?? u.usuario ?? '').trim(),
+    });
     setBusqueda(`${u.nombre}`);
     setUsuarios([]);
   }
@@ -64,17 +108,49 @@ export default function SuspensionList() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    const codigo = String(formData.codigo ?? '').trim();
+    if (!codigo) {
+      mostrarNotificacion({
+        tipo: 'error',
+        mensaje: 'Seleccione un usuario de la lista para asignar el código.',
+      });
+      return;
+    }
+
+    if (!fechasSuspensionValidas(formData.fechaInicio, formData.fechaFin)) {
+      mostrarNotificacion({
+        tipo: 'error',
+        mensaje: 'La fecha de inicio debe ser anterior a la fecha de fin.',
+      });
+      return;
+    }
+
+    if (
+      usuarioTieneSuspensionActivaPendiente(
+        suspensiones,
+        codigo,
+        editMode ? formData.id : undefined,
+      )
+    ) {
+      mostrarNotificacion({
+        tipo: 'error',
+        mensaje:
+          'El usuario ya tiene una suspensión activa. No se puede registrar otra hasta que finalice la vigente.',
+      });
+      return;
+    }
+
     try {
       if (editMode) {
         await updateSuspension(formData.id, {
-          codigo: formData.codigo,
+          codigo,
           motivo: formData.motivo,
           fechaInicio: formData.fechaInicio,
           fechaFin: formData.fechaFin,
         });
       } else {
         await createSuspension({
-          codigo: formData.codigo,
+          codigo,
           motivo: formData.motivo,
           fechaInicio: formData.fechaInicio,
           fechaFin: formData.fechaFin,
@@ -94,7 +170,7 @@ export default function SuspensionList() {
       await fetchAll();
     } catch (err: any) {
       console.error(err);
-      alert('Error al guardar la suspensión');
+      if (!yaTieneNotificacionError(err)) alert('Error al guardar la suspensión');
     }
   }
 
@@ -104,7 +180,7 @@ export default function SuspensionList() {
   function handleEdit(s: any) {
     setFormData({
       id: s.id,
-      codigo: s.codigo,
+      codigo: String(s.codigo ?? '').trim(),
       motivo: s.motivo,
       fechaInicio: s.fechaInicio.substring(0, 10),
       fechaFin: s.fechaFin.substring(0, 10),
@@ -123,51 +199,61 @@ export default function SuspensionList() {
     }
   }
 
+  const columnas: ColumnaResponsive<Suspension>[] = [
+    { key: 'id', header: 'No' },
+    { key: 'codigo', header: 'Código' },
+    { key: 'motivo', header: 'Motivo' },
+    {
+      key: 'fechaInicio',
+      header: 'Inicio',
+      render: (s) => s.fechaInicio.substring(0, 10),
+    },
+    {
+      key: 'fechaFin',
+      header: 'Fin',
+      render: (s) => s.fechaFin.substring(0, 10),
+    },
+    {
+      key: 'acciones',
+      header: 'Acciones',
+      apilarEnTarjeta: true,
+      render: (s) => (
+        <div className="table-actions">
+          <button className="btn btn-warning" onClick={() => handleEdit(s)} type="button">
+            <Pencil size={16} />
+          </button>
+          <button className="btn btn-danger" onClick={() => handleDelete(s.id)} type="button">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="container">
-      <h2 className="text-2xl font-bold mb-4">Gestión de Suspensiones</h2>
+      <h2 className="page-heading">Gestión de Suspensiones</h2>
 
-      <div className="flex justify-end mb-6 mr-10">
-        <button onClick={() => setShowModal(true)} className="btn btn-primary">
+      <div className="panel-toolbar">
+        <button onClick={() => setShowModal(true)} className="btn btn-primary" type="button">
           Crear Suspensión
         </button>
       </div>
-      <br></br>
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>No</th>
-              <th>Código</th>
-              <th>Motivo</th>
-              <th>Inicio</th>
-              <th>Fin</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {suspensiones.map((s) => (
-              <tr key={s.id}>
-                <td>{s.id}</td>
-                <td>{s.codigo}</td>
-                <td>{s.motivo}</td>
-                <td>{s.fechaInicio.substring(0, 10)}</td>
-                <td>{s.fechaFin.substring(0, 10)}</td>
-                <td>
-                  <div className="table-actions">
-                      <button className="btn btn-warning" onClick={() => handleEdit(s)}>
-                            <Pencil size={16} />
-                       </button>
-                       <button className="btn btn-danger" onClick={() => handleDelete(s.id)}>
-                           <Trash2 size={16} />
-                        </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <FiltroTabla
+        valor={busquedaTabla}
+        onChange={setBusquedaTabla}
+        placeholder="Buscar por código, motivo o fechas…"
+      />
+      <ResponsiveTable
+        columnas={columnas}
+        filas={paginacion.filasPagina as Suspension[]}
+        mensajeVacio={
+          suspensiones.length > 0 && suspensionesFiltradas.length === 0
+            ? 'Sin resultados para la búsqueda.'
+            : undefined
+        }
+      />
+      <PaginacionTabla paginacion={paginacion} />
 
       {/* ========================================= */}
       {/* MODAL */}
@@ -190,6 +276,9 @@ export default function SuspensionList() {
                   className="input"
                   value={busqueda}
                   onChange={(e) => handleBuscarUsuario(e.target.value)}
+                  pattern={PATRON_NOMBRE_BUSQUEDA_HTML}
+                  title="Solo letras y espacios"
+                  autoComplete="off"
                 />
 
                 {/* Dropdown resultados */}
@@ -245,6 +334,7 @@ export default function SuspensionList() {
                   type="date"
                   className="input"
                   value={formData.fechaFin}
+                  min={formData.fechaInicio || undefined}
                   onChange={(e) => setFormData({ ...formData, fechaFin: e.target.value })}
                 />
               </div>

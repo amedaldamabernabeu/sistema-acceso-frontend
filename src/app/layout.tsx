@@ -4,6 +4,8 @@ import { Metadata } from "next";
 import { ReactNode } from "react";
 import { AuthProvider } from "../components/auth/AuthProvider";
 import Footer from "@/components/Footer";
+import GuardRutaSeguridad from "@/components/GuardRutaSeguridad";
+import { NotificacionProvider } from "@/components/notificaciones/NotificacionProvider";
 import NavbarWrapper from "../components/NavbarWrapper";
 
 export const metadata: Metadata = {
@@ -19,15 +21,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <div className="app-shell">
 
             <AuthProvider>
-              <NavbarWrapper />
+              <NotificacionProvider>
+                <NavbarWrapper />
+                <GuardRutaSeguridad />
 
-              {/* Contenido principal */}
-              <div style={{ width: "100%", flex: 1 }}>
-                {children}
-              </div>
+                {/* Contenido principal */}
+                <div style={{ width: "100%", flex: 1 }}>
+                  {children}
+                </div>
 
-              {/* Footer */}
-              <Footer />
+                {/* Footer */}
+                <Footer />
+              </NotificacionProvider>
             </AuthProvider>
 
           </div>

@@ -2,6 +2,7 @@
  * Nombres canónicos de roles (alineados con backend `roles-sistema.ts` y `Role.name` en BD).
  */
 export const ROL_ADMINISTRADOR_NOMBRE = 'Administrador';
+export const ROL_SEGURIDAD_PROTECCION_NOMBRE = 'Seguridad y protección';
 
 export function normalizarNombreRol(nombre: string): string {
   return nombre
@@ -11,7 +12,7 @@ export function normalizarNombreRol(nombre: string): string {
     .toLowerCase();
 }
 
-function nombresRolesDesdeUsuario(user: unknown): string[] {
+export function nombresRolesDesdeUsuario(user: unknown): string[] {
   if (!user || typeof user !== 'object') return [];
   const u = user as {
     roles?: Array<{ role?: { name?: string }; name?: string }>;
@@ -26,4 +27,11 @@ export function usuarioTieneRolAdministrador(user: unknown): boolean {
     nombresRolesDesdeUsuario(user).map(normalizarNombreRol),
   );
   return conjunto.has(normalizarNombreRol(ROL_ADMINISTRADOR_NOMBRE));
+}
+
+export function usuarioTieneRolSeguridadProteccion(user: unknown): boolean {
+  const conjunto = new Set(
+    nombresRolesDesdeUsuario(user).map(normalizarNombreRol),
+  );
+  return conjunto.has(normalizarNombreRol(ROL_SEGURIDAD_PROTECCION_NOMBRE));
 }

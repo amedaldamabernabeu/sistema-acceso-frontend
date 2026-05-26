@@ -35,7 +35,7 @@ export default function LoginForm({ redirectAfter = '/' }: LoginFormProps) {
     <form onSubmit={handleSubmit} className="login-form">
       <label><span>Email</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></label>
       <label><span>Contraseña</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} required /></label>
-      <div style={{ display:'flex', gap:8, marginTop: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10 }}>
         <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Ingresando...' : 'Entrar'}</button>
       </div>
     </form>

@@ -266,7 +266,7 @@ export function puedeAccederUsuarioPathnamePanel(
   if (!user) return false;
   if (usuarioTieneRolAdministrador(user)) return true;
   const base = normalizarPathname(pathname);
-  if (base === '/' || base === '/login') return true;
+  if (base === '/' || base === '/login' || base === '/ayuda') return true;
   if (base.startsWith('/dashboard/paquete/')) {
     const idPaquete = base.slice('/dashboard/paquete/'.length);
     const visibles = paquetesDashboardVisiblesParaUsuario(user);

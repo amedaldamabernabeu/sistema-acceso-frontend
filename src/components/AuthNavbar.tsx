@@ -63,6 +63,13 @@ export default function AuthNavbar() {
             </Link>
           );
         })}
+        <Link
+          className={pathname === '/ayuda' ? 'active' : ''}
+          href="/ayuda"
+          onClick={() => setOpen(false)}
+        >
+          Ayuda
+        </Link>
       </nav>
 
       <div className="nav-actions">

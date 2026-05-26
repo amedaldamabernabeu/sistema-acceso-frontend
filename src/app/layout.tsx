@@ -9,7 +9,7 @@ import { NotificacionProvider } from "@/components/notificaciones/NotificacionPr
 import NavbarWrapper from "../components/NavbarWrapper";
 
 export const metadata: Metadata = {
-  title: "Sistema de Gestión de Acceso",
+  title: "Sistema de gestión de acceso",
   description: "Panel administrativo",
 };
 
